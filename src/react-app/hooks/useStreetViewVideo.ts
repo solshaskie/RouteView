@@ -108,3 +108,7 @@ export function useStreetViewVideo() {
     reset,
   };
 }
+
+// All helper functions related to waypoint generation and client-side
+// video creation have been moved to the backend.
+// This hook is now much simpler and only responsible for API communication.

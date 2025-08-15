@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { generateWaypoints } from "./waypoints";
+import { blendImages } from "./image-processing";
 import { GifFrame, GifUtil, GifCodec } from "gifwrap";
 import * as jpeg from "jpeg-js";
 
@@ -156,28 +157,53 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
 
     console.log(`Successfully fetched ${images.length} images.`);
 
-    // 4. Encode the images into a GIF
-    const frames: GifFrame[] = [];
-    for (const image of images) {
-      // Remove 'data:image/jpeg;base64,' prefix and convert to buffer
+    // 4. Decode all JPEGs into raw image data buffers
+    const decodedFrames = images.map(image => {
       const base64Data = image.substring(image.indexOf(',') + 1);
       const jpegData = Buffer.from(base64Data, 'base64');
+      return jpeg.decode(jpegData, { useTArray: true });
+    });
 
-      // Decode JPEG to raw pixel data
-      const rawImageData = jpeg.decode(jpegData, { useTArray: true });
+    // 5. Create enhanced image sequence with interpolation
+    const enhancedFrames: {data: Uint8Array, width: number, height: number}[] = [];
+    const interpolationFactor = settings.frameInterpolation || 1;
 
-      // Create a new GifFrame
-      const frame = new GifFrame(rawImageData.width, rawImageData.height, {
-        delayCentisecs: 100 / (settings.frameRate || 10), // Convert fps to centiseconds delay
-      });
+    for (let i = 0; i < decodedFrames.length - 1; i++) {
+      const currentFrame = decodedFrames[i];
+      const nextFrame = decodedFrames[i+1];
 
-      // Copy pixel data to the frame
-      frame.bitmap.data.set(rawImageData.data);
-      frames.push(frame);
+      // Add the original frame
+      enhancedFrames.push(currentFrame);
+
+      // Add interpolated frames
+      if (interpolationFactor > 1) {
+        for (let j = 1; j < interpolationFactor; j++) {
+          const ratio = j / interpolationFactor;
+          const blendedData = blendImages(currentFrame.data, nextFrame.data, ratio);
+          enhancedFrames.push({
+            data: blendedData,
+            width: currentFrame.width,
+            height: currentFrame.height,
+          });
+        }
+      }
+    }
+    // Add the very last frame
+    if (decodedFrames.length > 0) {
+      enhancedFrames.push(decodedFrames[decodedFrames.length - 1]);
     }
 
+    // 6. Encode the enhanced frames into a GIF
+    const gifFrames: GifFrame[] = enhancedFrames.map(frameData => {
+      const frame = new GifFrame(frameData.width, frameData.height, {
+        delayCentisecs: 100 / (settings.frameRate || 10) / interpolationFactor,
+      });
+      frame.bitmap.data.set(frameData.data);
+      return frame;
+    });
+
     const codec = new GifCodec();
-    const gifBuffer = await codec.encodeGif(frames, {});
+    const gifBuffer = await codec.encodeGif(gifFrames, {});
 
     // Return the GIF file
     c.header('Content-Type', 'image/gif');
