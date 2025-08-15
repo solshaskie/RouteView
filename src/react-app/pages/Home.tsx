@@ -135,9 +135,11 @@ export default function Home() {
             <RouteInfo pointA={pointA} pointB={pointB} route={route} />
 
             {/* Video Controls */}
-            <VideoControls 
-              route={route} 
-              disabled={!pointA || !pointB || !route} 
+            <VideoControls
+              route={route}
+              pointA={pointA}
+              pointB={pointB}
+              disabled={!pointA || !pointB || !route}
             />
 
             {/* Instructions Card */}
