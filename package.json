@@ -15,6 +15,9 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-router": "^7.5.3",
+    "spherical-geometry-js": "^3.0.0",
+    "gifwrap": "0.10.1",
+    "jpeg-js": "^0.4.4",
     "zod": "^3.24.3"
   },
   "devDependencies": {

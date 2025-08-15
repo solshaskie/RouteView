@@ -2,6 +2,9 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
+import { generateWaypoints } from "./waypoints";
+import { GifFrame, GifUtil, GifCodec } from "gifwrap";
+import * as jpeg from "jpeg-js";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -68,6 +71,122 @@ app.post("/api/streetview-image", zValidator("json", streetViewRequestSchema), a
     console.error("Street View image generation error:", error);
     return c.json(
       { error: "Failed to generate street view image" },
+      500
+    );
+  }
+});
+
+// Video Generation endpoint
+const videoRequestSchema = z.object({
+  pointA: z.object({
+    lat: z.number(),
+    lng: z.number(),
+  }),
+  pointB: z.object({
+    lat: z.number(),
+    lng: z.number(),
+  }),
+  settings: z.any(), // For now, we'll accept any settings
+});
+
+app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c) => {
+  const { pointA, pointB, settings } = c.req.valid("json");
+  const apiKey = c.env.GOOGLE_MAPS_API_KEY;
+
+  if (!apiKey) {
+    return c.json({ error: "Google Maps API key not configured" }, 500);
+  }
+
+  try {
+    // 1. Get route from Google Directions API
+    const directionsUrl = new URL("https://maps.googleapis.com/maps/api/directions/json");
+    directionsUrl.searchParams.set("origin", `${pointA.lat},${pointA.lng}`);
+    directionsUrl.searchParams.set("destination", `${pointB.lat},${pointB.lng}`);
+    directionsUrl.searchParams.set("key", apiKey);
+
+    const directionsResponse = await fetch(directionsUrl.toString());
+    if (!directionsResponse.ok) {
+      throw new Error(`Directions API error: ${directionsResponse.status}`);
+    }
+    const directionsData = await directionsResponse.json();
+
+    if (directionsData.status !== "OK" || !directionsData.routes || directionsData.routes.length === 0) {
+      throw new Error(`Could not find a route. Status: ${directionsData.status}`);
+    }
+
+    // 2. Generate waypoints from the route
+    // The settings object from the client might not have the correct structure,
+    // so we'll use default values for now.
+    const waypoints = generateWaypoints(
+      directionsData,
+      settings.intervalDistance || 20,
+      settings.smoothness || 4
+    );
+
+    console.log(`Generated ${waypoints.length} waypoints.`);
+
+    // 3. Fetch street view images for each waypoint
+    const imagePromises = waypoints.map(async (waypoint, index) => {
+      // Add a small delay to avoid hitting rate limits too hard
+      await new Promise(resolve => setTimeout(resolve, index * 100));
+
+      const streetViewUrl = new URL("https://maps.googleapis.com/maps/api/streetview");
+      streetViewUrl.searchParams.set("size", `${settings.imageWidth || 640}x${settings.imageHeight || 640}`);
+      streetViewUrl.searchParams.set("location", `${waypoint.lat},${waypoint.lng}`);
+      streetViewUrl.searchParams.set("heading", waypoint.heading.toString());
+      streetViewUrl.searchParams.set("pitch", "0");
+      streetViewUrl.searchParams.set("fov", "90");
+      streetViewUrl.searchParams.set("key", apiKey);
+
+      const response = await fetch(streetViewUrl.toString());
+      if (!response.ok) {
+        console.warn(`Failed to fetch image for waypoint ${index}. Status: ${response.status}`);
+        return null; // Return null for failed images
+      }
+      const imageBuffer = await response.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
+      return `data:image/jpeg;base64,${base64}`;
+    });
+
+    const images = (await Promise.all(imagePromises)).filter(img => img !== null) as string[];
+
+    if (images.length === 0) {
+      throw new Error("Could not generate any street view images for this route.");
+    }
+
+    console.log(`Successfully fetched ${images.length} images.`);
+
+    // 4. Encode the images into a GIF
+    const frames: GifFrame[] = [];
+    for (const image of images) {
+      // Remove 'data:image/jpeg;base64,' prefix and convert to buffer
+      const base64Data = image.substring(image.indexOf(',') + 1);
+      const jpegData = Buffer.from(base64Data, 'base64');
+
+      // Decode JPEG to raw pixel data
+      const rawImageData = jpeg.decode(jpegData, { useTArray: true });
+
+      // Create a new GifFrame
+      const frame = new GifFrame(rawImageData.width, rawImageData.height, {
+        delayCentisecs: 100 / (settings.frameRate || 10), // Convert fps to centiseconds delay
+      });
+
+      // Copy pixel data to the frame
+      frame.bitmap.data.set(rawImageData.data);
+      frames.push(frame);
+    }
+
+    const codec = new GifCodec();
+    const gifBuffer = await codec.encodeGif(frames, {});
+
+    // Return the GIF file
+    c.header('Content-Type', 'image/gif');
+    c.header('Content-Disposition', 'attachment; filename="streetcruise.gif"');
+    return c.body(gifBuffer.buffer);
+  } catch (error) {
+    console.error("Video generation error:", error);
+    return c.json(
+      { error: error instanceof Error ? error.message : "Failed to generate video" },
       500
     );
   }

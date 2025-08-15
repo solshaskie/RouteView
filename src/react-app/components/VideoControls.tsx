@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useStreetViewVideo } from "@/react-app/hooks/useStreetViewVideo";
-import CustomVideoPlayer from "@/react-app/components/CustomVideoPlayer";
 import { 
   Camera, 
   Video, 
@@ -12,13 +11,16 @@ import {
   Play,
   RotateCcw
 } from "lucide-react";
+import { RoutePoint } from "@/shared/types";
 
 interface VideoControlsProps {
   route: google.maps.DirectionsResult | null;
+  pointA: RoutePoint | null;
+  pointB: RoutePoint | null;
   disabled?: boolean;
 }
 
-export default function VideoControls({ route, disabled }: VideoControlsProps) {
+export default function VideoControls({ route, pointA, pointB, disabled }: VideoControlsProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState({
     frameRate: 20,
@@ -44,10 +46,10 @@ export default function VideoControls({ route, disabled }: VideoControlsProps) {
   } = useStreetViewVideo();
 
   const handleGenerateImages = async () => {
-    if (!route) return;
+    if (!route || !pointA || !pointB) return;
 
     try {
-      await generateVideo(route, settings);
+      await generateVideo(pointA, pointB, settings);
     } catch (err) {
       console.error("Video generation failed:", err);
     }
@@ -337,8 +339,8 @@ export default function VideoControls({ route, disabled }: VideoControlsProps) {
               </p>
             </div>
 
-            {/* Custom Video Player */}
-            <CustomVideoPlayer src={videoUrl} className="max-h-80" />
+            {/* Generated GIF */}
+            <img src={videoUrl} alt="Generated street view drive" className="rounded-lg shadow-lg w-full" />
 
             {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-3">
@@ -347,7 +349,7 @@ export default function VideoControls({ route, disabled }: VideoControlsProps) {
                 className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-blue-600 text-white rounded-lg font-medium hover:from-green-600 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl"
               >
                 <Download className="w-4 h-4" />
-                Download
+                Download GIF
               </button>
               
               <button
@@ -355,38 +357,8 @@ export default function VideoControls({ route, disabled }: VideoControlsProps) {
                 className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
               >
                 <RotateCcw className="w-4 h-4" />
-                New Video
+                New
               </button>
-            </div>
-
-            {/* Video Stats */}
-            <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-4 border border-gray-200">
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Video Details</h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="text-center">
-                  <div className="font-semibold text-gray-700">{images.length}</div>
-                  <div className="text-gray-500 text-xs">Frames</div>
-                </div>
-                <div className="text-center">
-                  <div className="font-semibold text-gray-700">{settings.frameRate} fps</div>
-                  <div className="text-gray-500 text-xs">Frame Rate</div>
-                </div>
-                <div className="text-center">
-                  <div className="font-semibold text-gray-700">{settings.imageWidth}×{settings.imageHeight}</div>
-                  <div className="text-gray-500 text-xs">Resolution</div>
-                </div>
-                <div className="text-center">
-                  <div className="font-semibold text-gray-700">
-                    ~{Math.round(images.length / settings.frameRate)}s
-                  </div>
-                  <div className="text-gray-500 text-xs">Duration</div>
-                </div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-200">
-                <p className="text-xs text-gray-600 text-center">
-                  <strong>Cinematic Controls:</strong> Use speed controls (0.25x-2x) for detailed viewing, frame-by-frame navigation (←→) for precision, and timeline scrubbing to jump to any scene
-                </p>
-              </div>
             </div>
           </div>
         )}
