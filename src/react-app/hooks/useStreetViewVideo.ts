@@ -34,7 +34,8 @@ export function useStreetViewVideo() {
   });
 
   const generateVideo = async (
-    route: google.maps.DirectionsResult,
+    pointA: RoutePoint,
+    pointB: RoutePoint,
     options: VideoGenerationOptions
   ) => {
     setState(prev => ({
@@ -55,11 +56,8 @@ export function useStreetViewVideo() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          // We need to extract pointA and pointB from the route object
-          // This part needs to be adjusted based on how we get the start and end points.
-          // For now, let's assume we have them.
-          pointA: route.request.origin,
-          pointB: route.request.destination,
+          pointA: pointA,
+          pointB: pointB,
           settings: options,
         }),
       });
@@ -110,7 +108,3 @@ export function useStreetViewVideo() {
     reset,
   };
 }
-
-// All helper functions related to waypoint generation and client-side
-// video creation have been moved to the backend.
-// This hook is now much simpler and only responsible for API communication.
