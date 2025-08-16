@@ -31,13 +31,10 @@ export function generateWaypoints(
   const leg = route.routes[0]?.legs[0];
   if (!leg) return waypoints;
 
-  // Collect all points by decoding the polyline for each step
   let allPoints: RoutePoint[] = [];
   for (const step of leg.steps) {
     if (step.polyline && step.polyline.points) {
       const decodedPoints = decode(step.polyline.points);
-      // The decode function returns an array of { lat: number, lng: number } objects.
-      // We can directly concatenate this to our allPoints array.
       allPoints = allPoints.concat(decodedPoints);
     }
   }
