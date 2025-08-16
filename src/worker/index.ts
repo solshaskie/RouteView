@@ -53,7 +53,6 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
       throw new Error(`Could not find a route. Status: ${directionsData.status}`);
     }
 
-    // Call the new, simplified waypoint generation function
     const waypoints = generateWaypoints(
       directionsData,
       settings.intervalDistance || 20
@@ -65,8 +64,12 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
         await new Promise(resolve => setTimeout(resolve, index * 50));
         const streetViewUrl = new URL("https://maps.googleapis.com/maps/api/streetview");
         streetViewUrl.searchParams.set("size", `${settings.imageWidth || 640}x${settings.imageHeight || 640}`);
-        streetViewUrl.searchParams.set("location", `${waypoint.lat},${waypoint.lng}`);
-        streetViewUrl.searchParams.set("heading", waypoint.heading.toString());
+        
+        // Round coordinates to 6 decimal places and remove heading
+        const lat = parseFloat(waypoint.lat.toFixed(6));
+        const lng = parseFloat(waypoint.lng.toFixed(6));
+        
+        streetViewUrl.searchParams.set("location", `${lat},${lng}`);
         streetViewUrl.searchParams.set("pitch", "0");
         streetViewUrl.searchParams.set("fov", "90");
         streetViewUrl.searchParams.set("radius", "100");
@@ -74,16 +77,14 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
         
         const response = await fetch(streetViewUrl.toString());
         if (!response.ok) {
-          return null; // Don't treat "not found" as a hard error
+          return null;
         }
         const imageBuffer = await response.arrayBuffer();
-        // Check for the placeholder image by its small size
         if (imageBuffer.byteLength < 2000) {
             return null;
         }
         return Buffer.from(imageBuffer);
       } catch (e) {
-        console.error(`An exception occurred while fetching image for waypoint ${index}:`, e);
         return null;
       }
     });

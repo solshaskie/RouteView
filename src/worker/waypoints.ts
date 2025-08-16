@@ -18,21 +18,17 @@ type DirectionsResult = {
   }[];
 };
 
-export interface Waypoint extends RoutePoint {
-  heading: number;
-}
+// The waypoint no longer needs to store the heading.
+export type Waypoint = RoutePoint;
 
-// A much simpler and more robust waypoint generation function.
 export function generateWaypoints(
   route: DirectionsResult,
   intervalDistance: number
 ): Waypoint[] {
-  const waypoints: Waypoint[] = [];
-  const leg = route.routes[0]?.legs[0];
-  if (!leg) return waypoints;
-
-  // 1. Decode all polylines into a single, continuous path of points.
   let allPoints: RoutePoint[] = [];
+  const leg = route.routes[0]?.legs[0];
+  if (!leg) return [];
+
   for (const step of leg.steps) {
     if (step.polyline && step.polyline.points) {
       const decodedPoints = decode(step.polyline.points);
@@ -40,39 +36,32 @@ export function generateWaypoints(
     }
   }
 
-  if (allPoints.length < 2) {
-    return [];
-  }
+  if (allPoints.length < 2) return [];
 
-  // 2. Iterate along the path and create waypoints at the desired interval.
+  const waypoints: Waypoint[] = [];
   let distanceAccumulator = 0;
+
+  // Add the very first point
+  waypoints.push(allPoints[0]);
+
   for (let i = 0; i < allPoints.length - 1; i++) {
     const startPoint = allPoints[i];
     const endPoint = allPoints[i + 1];
 
     const segmentDistance = computeDistanceBetween(startPoint, endPoint);
-    const segmentHeading = computeHeading(startPoint, endPoint);
-
-    // Add the first point of the segment
-    if (waypoints.length === 0) {
-        waypoints.push({ ...startPoint, heading: segmentHeading });
-    }
-
-    // Add interpolated points along the segment
+    
     distanceAccumulator += segmentDistance;
+
     while (distanceAccumulator >= intervalDistance) {
-        const overflow = distanceAccumulator - intervalDistance;
-        const ratio = 1 - (overflow / segmentDistance);
-        const newPoint = interpolate(startPoint, endPoint, ratio);
-        
-        waypoints.push({ ...newPoint, heading: segmentHeading });
-        
-        distanceAccumulator = overflow;
+      const overflow = distanceAccumulator - intervalDistance;
+      const ratio = 1 - (overflow / segmentDistance);
+      const newPoint = interpolate(startPoint, endPoint, ratio);
+      
+      waypoints.push(newPoint);
+      
+      distanceAccumulator = overflow;
     }
   }
-
-  // Add the very last point
-  waypoints.push({ ...allPoints[allPoints.length - 1], heading: waypoints[waypoints.length - 1]?.heading || 0 });
-
+  
   return waypoints;
 }
