@@ -36,11 +36,17 @@ export function generateWaypoints(
   for (const step of leg.steps) {
     if (step.polyline && step.polyline.points) {
       const decodedPoints = decode(step.polyline.points);
-      // The 'decode' function returns an array of [lat, lng] pairs.
-      // We need to map it to our {lat, lng} object format.
       allPoints.push(...decodedPoints.map(p => ({ lat: p[0], lng: p[1] })));
     }
   }
+  
+  // --- DEBUGGING ---
+  console.log(`[DEBUG] Found ${allPoints.length} total points from polylines.`);
+  if(allPoints.length > 0) {
+    console.log("[DEBUG] First point:", allPoints[0]);
+    console.log("[DEBUG] Last point:", allPoints[allPoints.length - 1]);
+  }
+  // --- END DEBUGGING ---
 
   if (allPoints.length < 2) return waypoints;
   
@@ -52,6 +58,13 @@ export function generateWaypoints(
   for (let i = 0; i < smoothedPoints.length - 1; i++) {
     const point1 = smoothedPoints[i];
     const point2 = smoothedPoints[i + 1];
+
+    if(typeof point1.lat !== 'number' || typeof point1.lng !== 'number' || typeof point2.lat !== 'number' || typeof point2.lng !== 'number') {
+        console.error("[DEBUG] Invalid point found before computeDistanceBetween:", {point1, point2});
+        // Skip this iteration to avoid a crash
+        continue;
+    }
+
     const segmentDistance = computeDistanceBetween(point1, point2);
     while (totalDistance + segmentDistance >= nextWaypointDistance) {
       const distanceAlongSegment = nextWaypointDistance - totalDistance;
@@ -106,6 +119,11 @@ function createSmoothPath(points: RoutePoint[], smoothness: number): RoutePoint[
     for (let t = 1; t <= segments; t++) {
       const ratio = t / (segments + 1);
       const smoothedPoint = catmullRomSpline(p0, p1, p2, p3, ratio, tension);
+       // --- DEBUGGING ---
+      if (isNaN(smoothedPoint.lat) || isNaN(smoothedPoint.lng)) {
+        console.error("[DEBUG] NaN created in catmullRomSpline", { p0, p1, p2, p3, t, tension });
+      }
+      // --- END DEBUGGING ---
       smoothedPoints.push(smoothedPoint);
     }
   }
