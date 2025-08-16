@@ -125,3 +125,5 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
     );
   }
 });
+
+export default app;
