@@ -4,12 +4,15 @@ import {
   computeHeading,
   interpolate,
 } from "spherical-geometry-js";
+import decode from "decode-google-map-polyline";
 
 type DirectionsResult = {
   routes: {
     legs: {
       steps: {
-        path: { lat: number; lng: number }[];
+        polyline: {
+          points: string;
+        };
       }[];
     }[];
   }[];
@@ -27,16 +30,25 @@ export function generateWaypoints(
   const waypoints: Waypoint[] = [];
   const leg = route.routes[0]?.legs[0];
   if (!leg) return waypoints;
+
+  // Collect all points by decoding the polyline for each step
   const allPoints: RoutePoint[] = [];
   for (const step of leg.steps) {
-    if (step.path && step.path.length > 0) {
-      allPoints.push(...step.path.map(p => ({ lat: p.lat, lng: p.lng })));
+    if (step.polyline && step.polyline.points) {
+      const decodedPoints = decode(step.polyline.points);
+      // The 'decode' function returns an array of [lat, lng] pairs.
+      // We need to map it to our {lat, lng} object format.
+      allPoints.push(...decodedPoints.map(p => ({ lat: p[0], lng: p[1] })));
     }
   }
+
   if (allPoints.length < 2) return waypoints;
+  
   let totalDistance = 0;
   let nextWaypointDistance = 0;
+  
   const smoothedPoints = createSmoothPath(allPoints, smoothness);
+  
   for (let i = 0; i < smoothedPoints.length - 1; i++) {
     const point1 = smoothedPoints[i];
     const point2 = smoothedPoints[i + 1];
@@ -66,6 +78,7 @@ export function generateWaypoints(
     }
     totalDistance += segmentDistance;
   }
+
   if (allPoints.length > 0) {
     const lastPoint = allPoints[allPoints.length - 1];
     const secondLastPoint = allPoints[allPoints.length - 2] || lastPoint;
