@@ -69,8 +69,13 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
         streetViewUrl.searchParams.set("heading", waypoint.heading.toString());
         streetViewUrl.searchParams.set("pitch", "0");
         streetViewUrl.searchParams.set("fov", "90");
-        streetViewUrl.searchParams.set("radius", "100"); // *** ADDED THIS LINE ***
+        streetViewUrl.searchParams.set("radius", "100");
         streetViewUrl.searchParams.set("key", apiKey);
+        
+        // --- DEBUGGING ---
+        console.log(`[DEBUG] Requesting URL: ${streetViewUrl.toString()}`);
+        // --- END DEBUGGING ---
+
         const response = await fetch(streetViewUrl.toString());
         if (!response.ok) {
           const errorText = await response.text();
