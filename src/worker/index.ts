@@ -51,7 +51,8 @@ app.post("/api/streetview-image", zValidator("json", streetViewRequestSchema), a
     const response = await fetch(streetViewUrl.toString());
     
     if (!response.ok) {
-      throw new Error(`Street View API error: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Street View API error: ${response.status} - ${errorText}`);
     }
 
     // Get the image as an array buffer
@@ -107,7 +108,8 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
 
     const directionsResponse = await fetch(directionsUrl.toString());
     if (!directionsResponse.ok) {
-      throw new Error(`Directions API error: ${directionsResponse.status}`);
+        const errorText = await directionsResponse.text();
+        throw new Error(`Directions API error: ${directionsResponse.status} - ${errorText}`);
     }
     const directionsData = await directionsResponse.json();
 
@@ -116,8 +118,6 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
     }
 
     // 2. Generate waypoints from the route
-    // The settings object from the client might not have the correct structure,
-    // so we'll use default values for now.
     const waypoints = generateWaypoints(
       directionsData,
       settings.intervalDistance || 20,
@@ -128,25 +128,32 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
 
     // 3. Fetch street view images for each waypoint
     const imagePromises = waypoints.map(async (waypoint, index) => {
-      // Add a small delay to avoid hitting rate limits too hard
-      await new Promise(resolve => setTimeout(resolve, index * 100));
+      try {
+        // Add a small delay to avoid hitting rate limits too hard
+        await new Promise(resolve => setTimeout(resolve, index * 100));
 
-      const streetViewUrl = new URL("https://maps.googleapis.com/maps/api/streetview");
-      streetViewUrl.searchParams.set("size", `${settings.imageWidth || 640}x${settings.imageHeight || 640}`);
-      streetViewUrl.searchParams.set("location", `${waypoint.lat},${waypoint.lng}`);
-      streetViewUrl.searchParams.set("heading", waypoint.heading.toString());
-      streetViewUrl.searchParams.set("pitch", "0");
-      streetViewUrl.searchParams.set("fov", "90");
-      streetViewUrl.searchParams.set("key", apiKey);
+        const streetViewUrl = new URL("https://maps.googleapis.com/maps/api/streetview");
+        streetViewUrl.searchParams.set("size", `${settings.imageWidth || 640}x${settings.imageHeight || 640}`);
+        streetViewUrl.searchParams.set("location", `${waypoint.lat},${waypoint.lng}`);
+        streetViewUrl.searchParams.set("heading", waypoint.heading.toString());
+        streetViewUrl.searchParams.set("pitch", "0");
+        streetViewUrl.searchParams.set("fov", "90");
+        streetViewUrl.searchParams.set("key", apiKey);
 
-      const response = await fetch(streetViewUrl.toString());
-      if (!response.ok) {
-        console.warn(`Failed to fetch image for waypoint ${index}. Status: ${response.status}`);
-        return null; // Return null for failed images
+        const response = await fetch(streetViewUrl.toString());
+        if (!response.ok) {
+          const errorText = await response.text();
+          // Log the detailed error and return null to continue processing other images
+          console.error(`Failed to fetch image for waypoint ${index}. Status: ${response.status}. Error: ${errorText}`);
+          return null;
+        }
+        const imageBuffer = await response.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
+        return `data:image/jpeg;base64,${base64}`;
+      } catch (e) {
+        console.error(`An exception occurred while fetching image for waypoint ${index}:`, e);
+        return null;
       }
-      const imageBuffer = await response.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
-      return `data:image/jpeg;base64,${base64}`;
     });
 
     const images = (await Promise.all(imagePromises)).filter(img => img !== null) as string[];
@@ -217,5 +224,6 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
     );
   }
 });
+
 
 export default app;
