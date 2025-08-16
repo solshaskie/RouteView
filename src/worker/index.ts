@@ -96,8 +96,17 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
     const gif = GIFEncoder();
     const delay = 1000 / (settings.frameRate || 10);
 
+    // Create a single global palette for the entire GIF
+    const combinedData = new Uint8Array(decodedFrames.reduce((acc, frame) => acc + frame.data.length, 0));
+    let offset = 0;
     for (const frame of decodedFrames) {
-        const palette = quantize(frame.data, 256);
+      combinedData.set(frame.data, offset);
+      offset += frame.data.length;
+    }
+    const palette = quantize(combinedData, 256);
+
+    // Encode each frame using the global palette
+    for (const frame of decodedFrames) {
         const index = applyPalette(frame.data, palette);
         gif.writeFrame(index, width, height, { palette, delay });
     }
@@ -116,5 +125,3 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
     );
   }
 });
-
-export default app;
