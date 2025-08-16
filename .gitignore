@@ -22,4 +22,6 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Local secrets
 .dev.vars

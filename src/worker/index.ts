@@ -72,10 +72,6 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
         streetViewUrl.searchParams.set("radius", "100");
         streetViewUrl.searchParams.set("key", apiKey);
         
-        // --- DEBUGGING ---
-        console.log(`[DEBUG] Requesting URL: ${streetViewUrl.toString()}`);
-        // --- END DEBUGGING ---
-
         const response = await fetch(streetViewUrl.toString());
         if (!response.ok) {
           const errorText = await response.text();
@@ -102,7 +98,6 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
     const gif = GIFEncoder();
     const delay = 1000 / (settings.frameRate || 10);
 
-    // Create a single global palette for the entire GIF
     const combinedData = new Uint8Array(decodedFrames.reduce((acc, frame) => acc + frame.data.length, 0));
     let offset = 0;
     for (const frame of decodedFrames) {
@@ -111,7 +106,6 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
     }
     const palette = quantize(combinedData, 256);
 
-    // Encode each frame using the global palette
     for (const frame of decodedFrames) {
         const index = applyPalette(frame.data, palette);
         gif.writeFrame(index, width, height, { palette, delay });

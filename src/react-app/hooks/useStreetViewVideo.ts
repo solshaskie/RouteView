@@ -12,14 +12,14 @@ interface StreetViewVideoState {
 }
 
 interface VideoGenerationOptions {
-  frameRate: number; // frames per second
-  intervalDistance: number; // meters between each frame
+  frameRate: number;
+  intervalDistance: number;
   imageWidth: number;
   imageHeight: number;
-  smoothness: number; // interpolation factor for smoother transitions (1-5)
-  motionBlur: boolean; // enable motion blur for smoother transitions
-  crossfadeStrength: number; // crossfade between frames (0-1)
-  frameInterpolation: number; // additional interpolated frames (1-4)
+  smoothness: number;
+  motionBlur: boolean;
+  crossfadeStrength: number;
+  frameInterpolation: number;
 }
 
 export function useStreetViewVideo() {
@@ -48,8 +48,6 @@ export function useStreetViewVideo() {
     }));
 
     try {
-      // The entire video generation process will now be handled by the backend.
-      // The frontend will just send the request and wait for the result.
       const response = await fetch("/api/generate-video", {
         method: "POST",
         headers: {
@@ -67,7 +65,6 @@ export function useStreetViewVideo() {
         throw new Error(errorData.error || "Video generation failed");
       }
 
-      // The backend will return a video file (e.g., a GIF or webm)
       const videoBlob = await response.blob();
       const videoUrl = URL.createObjectURL(videoBlob);
 
@@ -81,6 +78,7 @@ export function useStreetViewVideo() {
       return videoUrl;
 
     } catch (error) {
+      console.error("Full error object:", error);
       setState(prev => ({
         ...prev,
         isGenerating: false,
@@ -108,7 +106,3 @@ export function useStreetViewVideo() {
     reset,
   };
 }
-
-// All helper functions related to waypoint generation and client-side
-// video creation have been moved to the backend.
-// This hook is now much simpler and only responsible for API communication.
