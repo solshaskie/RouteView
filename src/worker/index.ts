@@ -66,7 +66,8 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
         const streetViewUrl = new URL("https://maps.googleapis.com/maps/api/streetview");
         streetViewUrl.searchParams.set("size", `${settings.imageWidth || 640}x${settings.imageHeight || 640}`);
         streetViewUrl.searchParams.set("location", `${waypoint.lat},${waypoint.lng}`);
-        streetViewUrl.searchParams.set("heading", waypoint.heading.toString());
+        // REMOVED HEADING TO LET GOOGLE CHOOSE THE BEST ANGLE
+        // streetViewUrl.searchParams.set("heading", waypoint.heading.toString());
         streetViewUrl.searchParams.set("pitch", "0");
         streetViewUrl.searchParams.set("fov", "90");
         streetViewUrl.searchParams.set("radius", "100");
@@ -98,6 +99,7 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
     const gif = GIFEncoder();
     const delay = 1000 / (settings.frameRate || 10);
 
+    // Create a single global palette for the entire GIF
     const combinedData = new Uint8Array(decodedFrames.reduce((acc, frame) => acc + frame.data.length, 0));
     let offset = 0;
     for (const frame of decodedFrames) {
@@ -106,6 +108,7 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
     }
     const palette = quantize(combinedData, 256);
 
+    // Encode each frame using the global palette
     for (const frame of decodedFrames) {
         const index = applyPalette(frame.data, palette);
         gif.writeFrame(index, width, height, { palette, delay });
