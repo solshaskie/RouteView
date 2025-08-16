@@ -89,6 +89,26 @@ const videoRequestSchema = z.object({
   settings: z.any(), // For now, we'll accept any settings
 });
 
+// Helper function to process items in batches
+async function processInBatches<T, U>(
+  items: T[],
+  batchSize: number,
+  processItem: (item: T, index: number) => Promise<U>
+): Promise<U[]> {
+  let results: U[] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchPromises = batch.map((item, index) => processItem(item, i + index));
+    const batchResults = await Promise.all(batchPromises);
+    results = results.concat(batchResults);
+    // Add a small delay between batches to further reduce the risk of rate limiting
+    if (i + batchSize < items.length) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+  return results;
+}
+
 app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c) => {
   const { pointA, pointB, settings } = c.req.valid("json");
   const apiKey = c.env.GOOGLE_MAPS_API_KEY;
@@ -115,8 +135,6 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
     }
 
     // 2. Generate waypoints from the route
-    // The settings object from the client might not have the correct structure,
-    // so we'll use default values for now.
     const waypoints = generateWaypoints(
       directionsData,
       settings.intervalDistance || 20,
@@ -125,30 +143,38 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
 
     console.log(`Generated ${waypoints.length} waypoints.`);
 
-    // 3. Fetch street view images for each waypoint
-    const imagePromises = waypoints.map(async (waypoint, index) => {
-      // Add a small delay to avoid hitting rate limits too hard
-      await new Promise(resolve => setTimeout(resolve, index * 100));
+    // 3. Fetch street view images for each waypoint in batches
+    const images = (await processInBatches(
+      waypoints,
+      5, // Process 5 images at a time to stay within limits
+      async (waypoint, index) => {
+        // Add a small delay to avoid hitting rate limits too hard, even with batching
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-      const streetViewUrl = new URL("https://maps.googleapis.com/maps/api/streetview");
-      streetViewUrl.searchParams.set("size", `${settings.imageWidth || 640}x${settings.imageHeight || 640}`);
-      streetViewUrl.searchParams.set("location", `${waypoint.lat},${waypoint.lng}`);
-      streetViewUrl.searchParams.set("heading", waypoint.heading.toString());
-      streetViewUrl.searchParams.set("pitch", "0");
-      streetViewUrl.searchParams.set("fov", "90");
-      streetViewUrl.searchParams.set("key", apiKey);
+        const streetViewUrl = new URL("https://maps.googleapis.com/maps/api/streetview");
+        streetViewUrl.searchParams.set("size", `${settings.imageWidth || 640}x${settings.imageHeight || 640}`);
+        streetViewUrl.searchParams.set("location", `${waypoint.lat},${waypoint.lng}`);
+        streetViewUrl.searchParams.set("heading", waypoint.heading.toString());
+        streetViewUrl.searchParams.set("pitch", "0");
+        streetViewUrl.searchParams.set("fov", "90");
+        streetViewUrl.searchParams.set("key", apiKey);
 
-      const response = await fetch(streetViewUrl.toString());
-      if (!response.ok) {
-        console.warn(`Failed to fetch image for waypoint ${index}. Status: ${response.status}`);
-        return null; // Return null for failed images
+        try {
+          const response = await fetch(streetViewUrl.toString());
+          if (!response.ok) {
+            console.warn(`Failed to fetch image for waypoint ${index}. Status: ${response.status}`);
+            return null; // Return null for failed images
+          }
+          const imageBuffer = await response.arrayBuffer();
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
+          return `data:image/jpeg;base64,${base64}`;
+        } catch (error) {
+          console.warn(`Error fetching image for waypoint ${index}:`, error);
+          return null;
+        }
       }
-      const imageBuffer = await response.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
-      return `data:image/jpeg;base64,${base64}`;
-    });
+    )).filter(img => img !== null) as string[];
 
-    const images = (await Promise.all(imagePromises)).filter(img => img !== null) as string[];
 
     if (images.length === 0) {
       throw new Error("Could not generate any street view images for this route.");
@@ -171,8 +197,9 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
         delayCentisecs: 100 / (settings.frameRate || 10), // Convert fps to centiseconds delay
       });
 
-      // Copy pixel data to the frame
+      // Copy pixel data to the frame and quantize
       frame.bitmap.data.set(rawImageData.data);
+      GifUtil.quantizeDekker(frame, 256);
       frames.push(frame);
     }
 

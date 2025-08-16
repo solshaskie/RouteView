@@ -6,12 +6,15 @@ import {
 } from "spherical-geometry-js";
 
 // A simplified version of the Google Maps Directions API result
-// We only need the path points from the legs and steps.
 type DirectionsResult = {
   routes: {
     legs: {
       steps: {
-        path: { lat: number; lng: number }[];
+        start_location: { lat: number; lng: number };
+        end_location: { lat: number; lng: number };
+        polyline: {
+          points: string;
+        };
       }[];
     }[];
   }[];
@@ -42,12 +45,12 @@ export function generateWaypoints(
 
   // Collect all points along the entire route
   const allPoints: RoutePoint[] = [];
-  for (const step of leg.steps) {
-    const path = step.path;
-    if (path && path.length > 0) {
-      allPoints.push(...path.map(p => ({ lat: p.lat, lng: p.lng })));
+  if (leg.steps && leg.steps.length > 0) {
+    for (const step of leg.steps) {
+        allPoints.push(...decodePolyline(step.polyline.points));
     }
   }
+
 
   if (allPoints.length < 2) return waypoints;
 
@@ -117,7 +120,7 @@ function createSmoothPath(points: RoutePoint[], smoothness: number): RoutePoint[
   if (points.length <= 2) return points;
 
   const smoothedPoints: RoutePoint[] = [];
-  const tension = Math.max(0.1, 1 - (smoothness * 0.2));
+  const tension = 1 - Math.max(0.1, smoothness * 0.1);
 
   for (let i = 0; i < points.length - 1; i++) {
     const p0 = points[Math.max(0, i - 1)];
@@ -178,4 +181,34 @@ function blendHeadingsWithMomentum(heading1: number, heading2: number, momentum:
 
   const blended = heading1 + (diff * easedMomentum * smoothnessFactor);
   return ((blended % 360) + 360) % 360;
+}
+
+function decodePolyline(encoded: string): RoutePoint[] {
+  const points: RoutePoint[] = [];
+  let index = 0, len = encoded.length;
+  let lat = 0, lng = 0;
+
+  while (index < len) {
+    let b, shift = 0, result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
+
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return points;
 }
