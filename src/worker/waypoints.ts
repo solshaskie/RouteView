@@ -8,6 +8,9 @@ import decode from "decode-google-map-polyline";
 
 type DirectionsResult = {
   routes: {
+    overview_polyline: {
+      points: string;
+    };
     legs: {
       steps: {
         polyline: {
@@ -27,16 +30,14 @@ export function generateWaypoints(
   intervalDistance: number
 ): Waypoint[] {
   const waypoints: Waypoint[] = [];
-  const leg = route.routes[0]?.legs[0];
-  if (!leg) return waypoints;
+  const overview_polyline = route.routes[0]?.overview_polyline;
 
-  let allPoints: RoutePoint[] = [];
-  for (const step of leg.steps) {
-    if (step.polyline && step.polyline.points) {
-      const decodedPoints = decode(step.polyline.points);
-      allPoints = allPoints.concat(decodedPoints);
-    }
+  if (!overview_polyline || !overview_polyline.points) {
+    return [];
   }
+
+  // Use the single overview_polyline for the entire route.
+  const allPoints = decode(overview_polyline.points);
 
   if (allPoints.length < 2) {
     return [];
