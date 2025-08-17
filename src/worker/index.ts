@@ -198,7 +198,7 @@ app.post("/api/generate-video", zValidator("json", videoRequestSchema), async (c
       });
 
       // Copy pixel data to the frame and quantize
-      (frame.bitmap.data as Buffer).set(rawImageData.data);
+      frame.bitmap.data.set(rawImageData.data);
       GifUtil.quantizeDekker(frame, 256);
       frames.push(frame);
     }

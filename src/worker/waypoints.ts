@@ -47,10 +47,8 @@ export function generateWaypoints(
   const allPoints: RoutePoint[] = [];
   if (leg.steps && leg.steps.length > 0) {
     for (const step of leg.steps) {
-        allPoints.push({ lat: step.start_location.lat, lng: step.start_location.lng });
+        allPoints.push(...decodePolyline(step.polyline.points));
     }
-    const lastStep = leg.steps[leg.steps.length - 1];
-    allPoints.push({ lat: lastStep.end_location.lat, lng: lastStep.end_location.lng });
   }
 
 
@@ -122,7 +120,7 @@ function createSmoothPath(points: RoutePoint[], smoothness: number): RoutePoint[
   if (points.length <= 2) return points;
 
   const smoothedPoints: RoutePoint[] = [];
-  const tension = Math.max(0.1, 1 - (smoothness * 0.2));
+  const tension = 1 - Math.max(0.1, smoothness * 0.1);
 
   for (let i = 0; i < points.length - 1; i++) {
     const p0 = points[Math.max(0, i - 1)];
@@ -183,4 +181,34 @@ function blendHeadingsWithMomentum(heading1: number, heading2: number, momentum:
 
   const blended = heading1 + (diff * easedMomentum * smoothnessFactor);
   return ((blended % 360) + 360) % 360;
+}
+
+function decodePolyline(encoded: string): RoutePoint[] {
+  const points: RoutePoint[] = [];
+  let index = 0, len = encoded.length;
+  let lat = 0, lng = 0;
+
+  while (index < len) {
+    let b, shift = 0, result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
+
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return points;
 }
