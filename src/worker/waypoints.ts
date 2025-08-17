@@ -90,8 +90,8 @@ export function generateWaypoints(
       }
 
       waypoints.push({
-        lat: interpolatedPoint.lat,
-        lng: interpolatedPoint.lng,
+        lat: interpolatedPoint.lat(),
+        lng: interpolatedPoint.lng(),
         heading: heading,
       });
 
